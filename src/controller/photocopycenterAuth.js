@@ -3,6 +3,7 @@ const uuid = require("uuid");
 const { PrismaClient } = require("@prisma/client");
 const qr = require("qrcode"); // Import the qrcode library
 const supabase = require("../utils/supabaseClient");
+const Joi = require("joi");
 
 const prisma = new PrismaClient();
 
@@ -282,6 +283,72 @@ const photocopycenterController = {
     } catch (error) {
       res.status(500).json({
         message: "Error fetching shop files",
+        error: error.message,
+      });
+    }
+  },
+
+  async pricingConfig(req, res) {
+    try {
+      // Validate input
+      const pricingConfigSchema = Joi.object({
+        paperType: Joi.string()
+          .valid(
+            "A0",
+            "A1",
+            "A2",
+            "A3",
+            "A4",
+            "A5",
+            "LEGAL",
+            "LETTER",
+            "TABLOID"
+          )
+          .required(),
+        printType: Joi.string().valid("COLOR", "BLACK_WHITE").required(),
+        singleSided: Joi.number().positive().required(),
+        doubleSided: Joi.number().positive().required(),
+        shopOwnerId: Joi.string().uuid().required(),
+      });
+
+      const { error, value } = pricingConfigSchema.validate(req.body);
+      if (error) {
+        return res.status(400).json({ message: error.details[0].message });
+      }
+
+      const { paperType, printType, singleSided, doubleSided, shopOwnerId } =
+        value;
+
+      // Check if the combination already exists for the shop owner
+      const existingConfig = await prisma.pricingConfig.findFirst({
+        where: {
+          shopOwnerId,
+          paperType,
+          printType,
+        },
+      });
+
+      if (existingConfig) {
+        return res.status(400).json({
+          message: `Pricing configuration for ${paperType} (${printType}) already exists.`,
+        });
+      }
+
+      // Create new pricing configuration
+      const pricingConfig = await prisma.pricingConfig.create({
+        data: {
+          paperType,
+          printType,
+          singleSided,
+          doubleSided,
+          shopOwnerId,
+        },
+      });
+
+      res.status(201).json({ pricingConfig });
+    } catch (error) {
+      res.status(500).json({
+        message: "Error creating pricing configuration",
         error: error.message,
       });
     }

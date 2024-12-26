@@ -7,6 +7,7 @@ router.post("/register", photocopycenterController.register);
 
 router.get("/users", photocopycenterController.getAllUser);
 const multer = require("multer");
+const userController = require("../controller/UserAuth");
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -25,5 +26,11 @@ router.patch(
   photocopycenterController.updatePrintJobStatus
 );
 router.get("/shop-files/:shopId", photocopycenterController.getShopFiles);
+
+router.post("/pricing-config", photocopycenterController.pricingConfig);
+
+router.post("/login", userController.login);
+
+router.post("/logout", userController.logout);
 
 module.exports = router;

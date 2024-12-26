@@ -84,13 +84,9 @@ const userController = {
   async login(req, res) {
     try {
       const { email, password } = req.body;
-      if (!email || !password) {
-        return res.status(400).json({
-          message: "All fields (email, password) are required",
-        });
-      }
 
-      const user = await prisma.user.findUnique({
+      // Find user by email
+      const user = await prisma.shopOwner.findUnique({
         where: { email },
       });
 
@@ -99,6 +95,8 @@ const userController = {
           message: "Invalid email",
         });
       }
+      console.log(password);
+      console.log(user.password);
 
       const isPasswordValid = await bcrypt.compare(password, user.password);
       if (!isPasswordValid) {
