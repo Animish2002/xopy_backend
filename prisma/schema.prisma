@@ -1,0 +1,120 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+
+datasource db {
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+// Enums for Print Preferences
+enum PrintJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  CANCELLED
+}
+
+enum PrintType {
+  COLOR
+  BLACK_WHITE
+}
+
+enum PaperType {
+  A0
+  A1
+  A2
+  A3
+  A4
+  A5
+  LEGAL
+  LETTER
+  TABLOID
+}
+
+enum PrintSide {
+  SINGLE_SIDED
+  DOUBLE_SIDED
+}
+
+// ShopOwners Model
+model ShopOwner {
+  id            String         @id @default(uuid()) // Primary Key
+  name          String
+  shopName      String
+  email         String         @unique
+  passwordHash  String
+  phoneNumber   String         @unique
+  address       String?
+  qrCodeUrl     String?        // URL for generated QR Code
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  // Relations
+  printJobs     PrintJob[]     // One-to-Many with PrintJob
+  pricingConfig PricingConfig? // One-to-One with PricingConfig
+}
+
+// PrintJob Model
+model PrintJob {
+  id              String           @id @default(uuid()) // Primary Key
+  shopOwnerId     String           // Foreign Key
+  tokenNumber     String           @unique              // Unique Token for each PrintJob
+  customerName    String?
+  customerPhone   String?
+  customerEmail   String?
+
+  // Preferences
+  noofCopies      Int
+  printType       PrintType?
+  paperType       PaperType?
+  printSide       PrintSide?
+  specificPages   String?          // Comma-separated values for specific pages to print
+  totalPages      Int              @default(0)
+  totalCost       Decimal          @default(0)
+  status          PrintJobStatus   @default(PENDING)
+
+  // Relations
+  files           PrintJobFile[]   // One-to-Many with PrintJobFile
+  shopOwner       ShopOwner        @relation(fields: [shopOwnerId], references: [id])
+
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+// PrintJobFile Model
+model PrintJobFile {
+  id              String       @id @default(uuid()) // Primary Key
+  printJobId      String       // Foreign Key
+  fileName        String
+  fileUrl         String       // Cloud URL for the file
+  fileType        String       // PDF, JPG, etc.
+  encryptedHash   String?      // Encrypted file hash for security
+  pages           Int          @default(1)
+
+  printJob        PrintJob     @relation(fields: [printJobId], references: [id])
+
+  createdAt       DateTime     @default(now())
+}
+
+// PricingConfig Model
+model PricingConfig {
+  id              String       @id @default(uuid()) // Primary Key
+  shopOwnerId     String       @unique // Add unique constraint here
+
+  // Pricing Details
+  paperType       PaperType
+  printType       PrintType
+  singleSided     Decimal      @default(0) // Price for single-sided print
+  doubleSided     Decimal      @default(0) // Price for double-sided print
+
+  shopOwner       ShopOwner    @relation(fields: [shopOwnerId], references: [id])
+  createdAt       DateTime     @default(now())
+}

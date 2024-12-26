@@ -1,0 +1,302 @@
+const bcrypt = require("bcrypt");
+const uuid = require("uuid");
+const { PrismaClient } = require("@prisma/client");
+const qr = require("qrcode"); // Import the qrcode library
+const supabase = require("../utils/supabaseClient");
+
+const prisma = new PrismaClient();
+
+const JWT_SECRET = process.env.JWT_SECRET;
+
+const photocopycenterController = {
+  async register(req, res) {
+    try {
+      const { name, email, shopName, phoneNumber, address, passwordHash } =
+        req.body;
+      if (!name || !email || !phoneNumber || !shopName || !passwordHash) {
+        return res.status(400).json({
+          message: "All fields (name, email, phone, address) are required",
+        });
+      }
+
+      // Check if user already exists
+      const existingUser = await prisma.shopOwner.findUnique({
+        where: { email },
+      });
+
+      if (existingUser) {
+        return res.status(400).json({
+          message: "User with this email already exists",
+        });
+      }
+
+      // Hash password
+      const hashedPassword = await bcrypt.hash(passwordHash, 10);
+
+      // Create a new user
+      const user = await prisma.shopOwner.create({
+        data: {
+          id: uuid.v4(),
+          name,
+          email,
+          shopName,
+          phoneNumber,
+          address,
+          passwordHash: hashedPassword,
+        },
+      });
+
+      // Create a dedicated folder for the shop
+      const shopFolder = `shops/${user.id}/`;
+      const { error: storageError } = await supabase.storage
+        .from("shop-uploads")
+        .upload(`${shopFolder}.folder`, Buffer.from("")); // Create empty folder marker
+
+      if (storageError) {
+        return res.status(500).json({
+          message: "Error creating shop folder",
+          error: storageError.message,
+        });
+      }
+
+      // Generate portal URL with shop folder path
+      const portalUrl = `${process.env.FRONTEND_URL}/upload/${user.id}`;
+
+      // Generate QR code with shop information
+      const qrData = {
+        shopId: user.id,
+        portalUrl,
+        shopName: user.shopName,
+      };
+
+      const qrCodeUrl = await qr.toDataURL(JSON.stringify(qrData));
+
+      // Update user with QR code URL
+      const updatedUser = await prisma.shopOwner.update({
+        where: { id: user.id },
+        data: {
+          qrCodeUrl,
+        },
+      });
+
+      res.status(201).json({
+        message: "Shop owner registered successfully",
+        user: updatedUser,
+      });
+    } catch (error) {
+      res.status(500).json({
+        message: "Error creating user",
+        error: error.message,
+      });
+    }
+  },
+
+  async createPrintJob(req, res) {
+    try {
+      // Add these console logs at the start of the function
+      console.log("Request body:", req.body);
+      console.log("Request files:", req.files);
+      const {
+        "shopOwnerId ": shopOwnerIdWithSpace, // Match the exact field name from form
+        customerName,
+        customerPhone,
+        customerEmail,
+        noofCopies,
+        printType,
+        paperType,
+        printSide,
+        specificPages,
+      } = req.body;
+      // Clean the shopOwnerId by removing any whitespace
+      const shopOwnerId = shopOwnerIdWithSpace
+        ? shopOwnerIdWithSpace.trim()
+        : null;
+      const files = req.files;
+
+      // Validation with trimmed values
+      if (!shopOwnerId) {
+        return res.status(400).json({
+          message: "shopOwnerId is required",
+        });
+      }
+
+      if (!noofCopies) {
+        return res.status(400).json({
+          message: "noofCopies is required",
+        });
+      }
+
+      if (!files || files.length === 0) {
+        return res.status(400).json({
+          message: "At least one file is required",
+        });
+      }
+
+      // Allowed MIME types
+      const allowedFileTypes = [
+        "application/pdf", // PDF
+        "application/msword", // DOC
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // DOCX
+        "image/jpeg", // JPG
+        "image/png", // PNG
+      ];
+      // Check each file type
+      for (const file of files) {
+        if (!allowedFileTypes.includes(file.mimetype)) {
+          return res.status(400).json({
+            message: `Unsupported file type: ${file.mimetype}. Allowed types are PDF, DOC, DOCX, or images (JPEG, PNG, GIF).`,
+          });
+        }
+      }
+      // Generate unique token number
+      const tokenNumber = `PJ-${Date.now()}-${Math.floor(
+        Math.random() * 1000
+      )}`;
+
+      // Create print job with proper type conversion
+      const printJob = await prisma.printJob.create({
+        data: {
+          shopOwnerId: String(shopOwnerId),
+          tokenNumber,
+          customerName: String(customerName || ""),
+          customerPhone: String(customerPhone || ""),
+          customerEmail: String(customerEmail || ""),
+          noofCopies: parseInt(noofCopies),
+          printType: printType || "BLACK_WHITE",
+          paperType: paperType || "A4",
+          printSide: printSide || "SINGLE_SIDED",
+          specificPages: String(specificPages || ""),
+          status: "PENDING",
+        },
+      });
+
+      // Handle file uploads
+      const printJobFiles = [];
+      for (const file of files) {
+        const fileName = `shops/${shopOwnerId}/${printJob.id}_${file.originalname}`;
+
+        // Upload file to Supabase
+        const { error: uploadError } = await supabase.storage
+          .from("shop-uploads")
+          .upload(fileName, file.buffer, {
+            contentType: file.mimetype,
+          });
+
+        if (uploadError) throw uploadError;
+
+        // Get file URL
+        const { data: urlData } = await supabase.storage
+          .from("shop-uploads")
+          .createSignedUrl(fileName, 60 * 60); // 1 hour expiry
+
+        const printJobFile = await prisma.printJobFile.create({
+          data: {
+            printJobId: printJob.id,
+            fileName: file.originalname,
+            fileUrl: urlData.signedUrl,
+            fileType: file.mimetype,
+            pages: 1, // You might want to calculate this based on the file
+          },
+        });
+
+        printJobFiles.push(printJobFile);
+      }
+
+      res.status(201).json({
+        message: "Print job created successfully",
+        printJob: {
+          ...printJob,
+          files: printJobFiles,
+        },
+      });
+    } catch (error) {
+      console.error("Print job creation error:", error);
+      res.status(500).json({
+        message: "Error creating print job",
+        error: error.message,
+      });
+    }
+  },
+
+  async updatePrintJobStatus(req, res) {
+    try {
+      const { jobId } = req.params;
+      const { status } = req.body;
+
+      const printJob = await prisma.printJob.findUnique({
+        where: { id: jobId },
+        include: { files: true },
+      });
+
+      if (!printJob) {
+        return res.status(404).json({
+          message: "Print job not found",
+        });
+      }
+
+      // If status is COMPLETED, delete the files
+      if (status === "COMPLETED") {
+        // Delete files from storage
+        await Promise.all(
+          printJob.files.map(async (file) => {
+            const filePath = `shops/${printJob.shopOwnerId}/${printJob.id}_${file.fileName}`;
+            const { error: deleteError } = await supabase.storage
+              .from("shop-uploads")
+              .remove([filePath]);
+
+            if (deleteError) throw deleteError;
+          })
+        );
+      }
+
+      // Update job status
+      const updatedJob = await prisma.printJob.update({
+        where: { id: jobId },
+        data: { status },
+        include: { files: true },
+      });
+
+      res.status(200).json({
+        message: "Print job status updated successfully",
+        printJob: updatedJob,
+      });
+    } catch (error) {
+      res.status(500).json({
+        message: "Error updating print job status",
+        error: error.message,
+      });
+    }
+  },
+
+  async getShopFiles(req, res) {
+    try {
+      const { shopId } = req.params;
+
+      const { data: files, error } = await supabase.storage
+        .from("shop-uploads")
+        .list(`shops/${shopId}`);
+
+      if (error) throw error;
+
+      res.status(200).json({ files });
+    } catch (error) {
+      res.status(500).json({
+        message: "Error fetching shop files",
+        error: error.message,
+      });
+    }
+  },
+
+  async getAllUser(req, res) {
+    try {
+      const users = await prisma.shopOwner.findMany();
+      res.status(200).json({ users });
+    } catch (error) {
+      res
+        .status(500)
+        .json({ message: "Error fetching users", error: error.message });
+    }
+  },
+};
+
+module.exports = photocopycenterController;
