@@ -98,7 +98,7 @@ const photocopycenterController = {
       console.log("Request body:", req.body);
       console.log("Request files:", req.files);
       const {
-        "shopOwnerId ": shopOwnerIdWithSpace, // Match the exact field name from form
+        "shopOwnerId ": shopOwnerIdWithSpace, // Match the exact field name from form {printType, files}
         customerName,
         customerPhone,
         customerEmail,
@@ -349,6 +349,43 @@ const photocopycenterController = {
     } catch (error) {
       res.status(500).json({
         message: "Error creating pricing configuration",
+        error: error.message,
+      });
+    }
+  },
+
+  async getPricingConfig(req, res) {
+    try {
+      const { shopOwnerId } = req.params;
+      const pricingConfig = await prisma.pricingConfig.findMany({
+        where: { shopOwnerId },
+      });
+      res.status(200).json({ pricingConfig });
+    } catch (error) {
+      res.status(500).json({
+        message: "Error fetching pricing configuration",
+        error: error.message,
+      });
+    }
+  },
+
+  async generateQR(req, res) {
+    try {
+      const { shopOwnerId } = req.params;
+      const shopOwner = await prisma.shopOwner.findUnique({
+        where: { id: shopOwnerId },
+        select: { qrCodeUrl: true },
+      });
+      if (!shopOwner) {
+        return res.status(404).json({ message: "Shop owner not found" });
+      }
+
+      const qrCodeUrl = shopOwner.qrCodeUrl;
+
+      res.status(200).json({ qrCodeUrl });
+    } catch (error) {
+      res.status(500).json({
+        message: "Error generating QR code",
         error: error.message,
       });
     }

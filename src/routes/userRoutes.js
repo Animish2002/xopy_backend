@@ -21,13 +21,22 @@ router.post(
   upload.array("files"),
   photocopycenterController.createPrintJob
 );
+
 router.patch(
   "/print-jobs/:jobId/status",
   photocopycenterController.updatePrintJobStatus
 );
+
 router.get("/shop-files/:shopId", photocopycenterController.getShopFiles);
 
 router.post("/pricing-config", photocopycenterController.pricingConfig);
+
+router.get(
+  "/pricing-config/:shopOwnerId",
+  photocopycenterController.getPricingConfig
+);
+
+router.get("/generate-qr/:shopOwnerId", photocopycenterController.generateQR);
 
 router.post("/login", userController.login);
 
