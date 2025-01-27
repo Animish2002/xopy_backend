@@ -98,7 +98,7 @@ const photocopycenterController = {
       console.log("Request body:", req.body);
       console.log("Request files:", req.files);
       const {
-        "shopOwnerId ": shopOwnerIdWithSpace, // Match the exact field name from form {printType, files}
+        shopOwnerId,
         customerName,
         customerPhone,
         customerEmail,
@@ -109,9 +109,7 @@ const photocopycenterController = {
         specificPages,
       } = req.body;
       // Clean the shopOwnerId by removing any whitespace
-      const shopOwnerId = shopOwnerIdWithSpace
-        ? shopOwnerIdWithSpace.trim()
-        : null;
+
       const files = req.files;
 
       // Validation with trimmed values

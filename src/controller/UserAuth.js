@@ -12,7 +12,7 @@ const userController = {
     try {
       const { email, name, address, phone, password, role } = req.body;
 
-      const validRoles = ["CENTER_OWNER", "CUSTOMER"];
+      const validRoles = ["ShopOwner", "CUSTOMER"];
 
       if (role && !validRoles.includes(role)) {
         return res.status(400).json({
