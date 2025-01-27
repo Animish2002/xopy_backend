@@ -12,66 +12,70 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const photocopycenterController = {
   async register(req, res) {
     try {
-      const { name, email, shopName, phoneNumber, address, passwordHash } =
-        req.body;
+      const { name, email, shopName, phoneNumber, address, passwordHash } = req.body;
+      
       if (!name || !email || !phoneNumber || !shopName || !passwordHash) {
         return res.status(400).json({
           message: "All fields (name, email, phone, address) are required",
         });
       }
-
+  
       // Check if user already exists
       const existingUser = await prisma.shopOwner.findUnique({
         where: { email },
       });
-
+  
       if (existingUser) {
         return res.status(400).json({
           message: "User with this email already exists",
         });
       }
-
+  
       // Hash password
       const hashedPassword = await bcrypt.hash(passwordHash, 10);
-
-      // Create a new user
+  
+      // Generate 8-character unique ID
+      const shortId = uuid.v4().substring(0, 8);
+  
+      // Create a new user with role explicitly set and short ID
       const user = await prisma.shopOwner.create({
         data: {
-          id: uuid.v4(),
+          id: shortId,
           name,
           email,
           shopName,
           phoneNumber,
           address,
           passwordHash: hashedPassword,
+          role: 'ShopOwner',
         },
       });
-
+  
       // Create a dedicated folder for the shop
       const shopFolder = `shops/${user.id}/`;
       const { error: storageError } = await supabase.storage
         .from("shop-uploads")
         .upload(`${shopFolder}.folder`, Buffer.from("")); // Create empty folder marker
-
+  
       if (storageError) {
         return res.status(500).json({
           message: "Error creating shop folder",
           error: storageError.message,
         });
       }
-
+  
       // Generate portal URL with shop folder path
       const portalUrl = `${process.env.FRONTEND_URL}/upload/${user.id}`;
-
+  
       // Generate QR code with shop information
       const qrData = {
         shopId: user.id,
         portalUrl,
         shopName: user.shopName,
       };
-
+  
       const qrCodeUrl = await qr.toDataURL(JSON.stringify(qrData));
-
+  
       // Update user with QR code URL
       const updatedUser = await prisma.shopOwner.update({
         where: { id: user.id },
@@ -79,7 +83,7 @@ const photocopycenterController = {
           qrCodeUrl,
         },
       });
-
+  
       res.status(201).json({
         message: "Shop owner registered successfully",
         user: updatedUser,
@@ -271,82 +275,80 @@ const photocopycenterController = {
     try {
       const { shopId } = req.params;
 
-      // Get files from Supabase storage
+      // First get files from Supabase storage
       const { data: storageFiles, error: storageError } = await supabase.storage
         .from("shop-uploads")
         .list(`shops/${shopId}`);
 
       if (storageError) throw storageError;
 
-      // Get all print jobs for this shop owner
-      const printJobs = await prisma.printJob.findMany({
+      // Get all print jobs and associated files for this shop
+      const printJobsWithFiles = await prisma.printJob.findMany({
         where: {
           shopOwnerId: shopId,
         },
-        include: {
-          files: true, // Include the related PrintJobFile records
-        },
-      });
-
-      // Get the pricing configuration for this shop
-      const pricingConfig = await prisma.pricingConfig.findMany({
-        where: {
-          shopOwnerId: shopId,
+        select: {
+          id: true,
+          tokenNumber: true,
+          customerName: true,
+          customerPhone: true,
+          customerEmail: true,
+          noofCopies: true,
+          printType: true,
+          paperType: true,
+          printSide: true,
+          specificPages: true,
+          totalPages: true,
+          totalCost: true,
+          status: true,
+          createdAt: true,
+          files: {
+            select: {
+              id: true,
+              fileName: true,
+              fileUrl: true,
+              fileType: true,
+              pages: true,
+              createdAt: true,
+            },
+          },
         },
       });
 
       // Generate signed URLs for each file
       const filesWithUrls = await Promise.all(
-        storageFiles.map(async (file) => {
-          const {
-            data: { signedUrl },
-            error: signedUrlError,
-          } = await supabase.storage
-            .from("shop-uploads")
-            .createSignedUrl(`shops/${shopId}/${file.name}`, 3600); // 1 hour expiry
+        printJobsWithFiles.map(async (job) => {
+          const filesWithSignedUrls = await Promise.all(
+            job.files.map(async (file) => {
+              const {
+                data: { publicUrl },
+              } = supabase.storage
+                .from("shop-uploads")
+                .getPublicUrl(`shops/${shopId}/${file.fileName}`);
 
-          if (signedUrlError) throw signedUrlError;
-
-          // Find matching print job file details
-          const printJobFile = printJobs
-            .flatMap((job) => job.files)
-            .find((pjf) => pjf.fileName === file.name);
+              return {
+                ...file,
+                signedUrl: publicUrl,
+              };
+            })
+          );
 
           return {
-            fileId: printJobFile?.id,
-            fileName: file.name,
-            fileUrl: signedUrl,
-            fileType: file.metadata?.mimetype || printJobFile?.fileType,
-            created: file.created_at,
-            printJobDetails: printJobFile
-              ? {
-                  printJob: printJobs.find((job) =>
-                    job.files.some((f) => f.id === printJobFile.id)
-                  ),
-                  preferences: {
-                    noofCopies: printJobFile?.printJob?.noofCopies,
-                    printType: printJobFile?.printJob?.printType,
-                    paperType: printJobFile?.printJob?.paperType,
-                    printSide: printJobFile?.printJob?.printSide,
-                    specificPages: printJobFile?.printJob?.specificPages,
-                    totalPages: printJobFile?.pages || 0,
-                    totalCost: printJobFile?.printJob?.totalCost,
-                  },
-                }
-              : null,
-            pricing: pricingConfig,
+            ...job,
+            files: filesWithSignedUrls,
           };
         })
       );
 
       res.status(200).json({
-        files: filesWithUrls,
-        totalFiles: filesWithUrls.length,
+        success: true,
+        data: filesWithUrls,
       });
     } catch (error) {
-      console.error("Error in getFilesByShopId:", error);
+      console.error("Error fetching shop files:", error);
       res.status(500).json({
-        message: "Error fetching shop files and preferences",
+        success: false,
+        message: "Error fetching shop files",
         error: error.message,
       });
     }
@@ -372,7 +374,7 @@ const photocopycenterController = {
         printType: Joi.string().valid("COLOR", "BLACK_WHITE").required(),
         singleSided: Joi.number().positive().required(),
         doubleSided: Joi.number().positive().required(),
-        shopOwnerId: Joi.string().uuid().required(),
+        shopOwnerId: Joi.string().regex(/^[0-9a-fA-F]{8}$/).required(),
       });
 
       const { error, value } = pricingConfigSchema.validate(req.body);

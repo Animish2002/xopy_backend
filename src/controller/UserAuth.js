@@ -10,15 +10,8 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const userController = {
   async register(req, res) {
     try {
-      const { email, name, address, phone, password, role } = req.body;
-
-      const validRoles = ["ShopOwner", "CUSTOMER"];
-
-      if (role && !validRoles.includes(role)) {
-        return res.status(400).json({
-          message: "Invalid role. Allowed roles are: center-owner, customer",
-        });
-      }
+      const { email, name, address, phone, password } = req.body;
+      const role = "ShopOwner";
 
       if (!prisma.user) {
         return res.status(500).json({
@@ -104,7 +97,7 @@ const userController = {
       }
 
       const token = jwt.sign(
-        { id: user.id, email: user.email, role: user.role },
+        { id: user.id, email: user.email, role: user.role, name: user.name },
         JWT_SECRET,
         {
           expiresIn: "12h",
