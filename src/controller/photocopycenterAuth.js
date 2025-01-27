@@ -12,31 +12,32 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const photocopycenterController = {
   async register(req, res) {
     try {
-      const { name, email, shopName, phoneNumber, address, passwordHash } = req.body;
-      
+      const { name, email, shopName, phoneNumber, address, passwordHash } =
+        req.body;
+
       if (!name || !email || !phoneNumber || !shopName || !passwordHash) {
         return res.status(400).json({
           message: "All fields (name, email, phone, address) are required",
         });
       }
-  
+
       // Check if user already exists
       const existingUser = await prisma.shopOwner.findUnique({
         where: { email },
       });
-  
+
       if (existingUser) {
         return res.status(400).json({
           message: "User with this email already exists",
         });
       }
-  
+
       // Hash password
       const hashedPassword = await bcrypt.hash(passwordHash, 10);
-  
+
       // Generate 8-character unique ID
       const shortId = uuid.v4().substring(0, 8);
-  
+
       // Create a new user with role explicitly set and short ID
       const user = await prisma.shopOwner.create({
         data: {
@@ -47,35 +48,29 @@ const photocopycenterController = {
           phoneNumber,
           address,
           passwordHash: hashedPassword,
-          role: 'ShopOwner',
+          role: "ShopOwner",
         },
       });
-  
+
       // Create a dedicated folder for the shop
       const shopFolder = `shops/${user.id}/`;
       const { error: storageError } = await supabase.storage
         .from("shop-uploads")
         .upload(`${shopFolder}.folder`, Buffer.from("")); // Create empty folder marker
-  
+
       if (storageError) {
         return res.status(500).json({
           message: "Error creating shop folder",
           error: storageError.message,
         });
       }
-  
+
       // Generate portal URL with shop folder path
-      const portalUrl = `${process.env.FRONTEND_URL}/upload/${user.id}`;
-  
-      // Generate QR code with shop information
-      const qrData = {
-        shopId: user.id,
-        portalUrl,
-        shopName: user.shopName,
-      };
-  
-      const qrCodeUrl = await qr.toDataURL(JSON.stringify(qrData));
-  
+      const portalUrl = `${process.env.FRONTEND_URL}/preferences/${user.id}`;
+
+      // Generate QR code with portal URL
+      const qrCodeUrl = await qr.toDataURL(portalUrl);
+
       // Update user with QR code URL
       const updatedUser = await prisma.shopOwner.update({
         where: { id: user.id },
@@ -83,7 +78,7 @@ const photocopycenterController = {
           qrCodeUrl,
         },
       });
-  
+
       res.status(201).json({
         message: "Shop owner registered successfully",
         user: updatedUser,
@@ -374,7 +369,9 @@ const photocopycenterController = {
         printType: Joi.string().valid("COLOR", "BLACK_WHITE").required(),
         singleSided: Joi.number().positive().required(),
         doubleSided: Joi.number().positive().required(),
-        shopOwnerId: Joi.string().regex(/^[0-9a-fA-F]{8}$/).required(),
+        shopOwnerId: Joi.string()
+          .regex(/^[0-9a-fA-F]{8}$/)
+          .required(),
       });
 
       const { error, value } = pricingConfigSchema.validate(req.body);
