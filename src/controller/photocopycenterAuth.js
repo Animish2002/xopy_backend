@@ -267,20 +267,86 @@ const photocopycenterController = {
     }
   },
 
-  async getShopFiles(req, res) {
+  async getFilesByShopId(req, res) {
     try {
       const { shopId } = req.params;
 
-      const { data: files, error } = await supabase.storage
+      // Get files from Supabase storage
+      const { data: storageFiles, error: storageError } = await supabase.storage
         .from("shop-uploads")
         .list(`shops/${shopId}`);
 
-      if (error) throw error;
+      if (storageError) throw storageError;
 
-      res.status(200).json({ files });
+      // Get all print jobs for this shop owner
+      const printJobs = await prisma.printJob.findMany({
+        where: {
+          shopOwnerId: shopId,
+        },
+        include: {
+          files: true, // Include the related PrintJobFile records
+        },
+      });
+
+      // Get the pricing configuration for this shop
+      const pricingConfig = await prisma.pricingConfig.findMany({
+        where: {
+          shopOwnerId: shopId,
+        },
+      });
+
+      // Generate signed URLs for each file
+      const filesWithUrls = await Promise.all(
+        storageFiles.map(async (file) => {
+          const {
+            data: { signedUrl },
+            error: signedUrlError,
+          } = await supabase.storage
+            .from("shop-uploads")
+            .createSignedUrl(`shops/${shopId}/${file.name}`, 3600); // 1 hour expiry
+
+          if (signedUrlError) throw signedUrlError;
+
+          // Find matching print job file details
+          const printJobFile = printJobs
+            .flatMap((job) => job.files)
+            .find((pjf) => pjf.fileName === file.name);
+
+          return {
+            fileId: printJobFile?.id,
+            fileName: file.name,
+            fileUrl: signedUrl,
+            fileType: file.metadata?.mimetype || printJobFile?.fileType,
+            created: file.created_at,
+            printJobDetails: printJobFile
+              ? {
+                  printJob: printJobs.find((job) =>
+                    job.files.some((f) => f.id === printJobFile.id)
+                  ),
+                  preferences: {
+                    noofCopies: printJobFile?.printJob?.noofCopies,
+                    printType: printJobFile?.printJob?.printType,
+                    paperType: printJobFile?.printJob?.paperType,
+                    printSide: printJobFile?.printJob?.printSide,
+                    specificPages: printJobFile?.printJob?.specificPages,
+                    totalPages: printJobFile?.pages || 0,
+                    totalCost: printJobFile?.printJob?.totalCost,
+                  },
+                }
+              : null,
+            pricing: pricingConfig,
+          };
+        })
+      );
+
+      res.status(200).json({
+        files: filesWithUrls,
+        totalFiles: filesWithUrls.length,
+      });
     } catch (error) {
+      console.error("Error in getFilesByShopId:", error);
       res.status(500).json({
-        message: "Error fetching shop files",
+        message: "Error fetching shop files and preferences",
         error: error.message,
       });
     }

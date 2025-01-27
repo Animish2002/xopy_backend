@@ -27,7 +27,7 @@ router.patch(
   photocopycenterController.updatePrintJobStatus
 );
 
-router.get("/shop-files/:shopId", photocopycenterController.getShopFiles);
+router.get("/shop-files/:shopId", photocopycenterController.getFilesByShopId);
 
 router.post("/pricing-config", photocopycenterController.pricingConfig);
 
