@@ -10,7 +10,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const userController = {
   async register(req, res) {
     try {
-      const { email, name, address, phone, password } = req.body;
+      const { email, name, address, phone, password, shopName } = req.body;
       const role = "ShopOwner";
 
       if (!prisma.user) {
@@ -31,7 +31,7 @@ const userController = {
       if (!email || !name || !address || !phone || !password) {
         return res.status(400).json({
           message:
-            "All fields (email, name, address, phone, password) are required",
+            "All fields (email, name, address, phone, password, shopName ) are required",
         });
       }
 
@@ -44,6 +44,7 @@ const userController = {
           name,
           address,
           phone,
+          shopName,
           password: hashedPassword,
           role,
         },
@@ -97,7 +98,13 @@ const userController = {
       }
 
       const token = jwt.sign(
-        { id: user.id, email: user.email, role: user.role, name: user.name },
+        {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          name: user.name,
+          shopeName: user.shopeName,
+        },
         JWT_SECRET,
         {
           expiresIn: "12h",
