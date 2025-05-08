@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -46,64 +40,79 @@ enum PrintSide {
 
 enum Role {
   CUSTOMER
-  ShopOwner
-  Admin
+  SHOP_OWNER
+  ADMIN
 }
 
+// ==========================
+// Models
+// ==========================
 
-// ShopOwners Model
-model ShopOwner {
-  id           String   @id @default(uuid()) // Primary Key
+// User Model (Common for all users: customers, shop owners, admins)
+model User {
+  id           String   @id @default(uuid())
   name         String
-  shopName     String
   email        String   @unique
   passwordHash String
   phoneNumber  String   @unique
   address      String?
-  qrCodeUrl    String? // URL for generated QR Code
+  role         Role     @default(SHOP_OWNER)
+  isVerified   Boolean  @default(false) // Future use: If needed
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-  role         Role?
+
   // Relations
-  printJobs     PrintJob[] // One-to-Many with PrintJob
-  pricingConfig PricingConfig[]
+  shopOwnerInfo ShopOwner? // Only if the user is a shop owner
+  printJobs     PrintJob[] // Print jobs uploaded by customers
 }
 
-// PrintJob Model
-model PrintJob {
-  id            String  @id @default(uuid()) // Primary Key
-  shopOwnerId   String // Foreign Key
-  tokenNumber   String  @unique // Unique Token for each PrintJob
-  customerName  String?
-  customerPhone String?
-  customerEmail String?
+// ShopOwner Extra Info
+model ShopOwner {
+  id        String  @id @default(uuid())
+  userId    String  @unique // Link to User
+  shopName  String
+  qrCodeUrl String? // URL for generated QR Code
 
-  // Preferences
+  user          User            @relation(fields: [userId], references: [id])
+  pricingConfig PricingConfig[]
+  printJobs     PrintJob[] // Print jobs assigned to their shop
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Print Job
+model PrintJob {
+  id            String         @id @default(uuid())
+  userId        String? // Customer who uploaded (optional)
+  shopOwnerId   String // Shop where job is being printed
+  tokenNumber   String         @unique
   noofCopies    Int
   printType     PrintType?
   paperType     PaperType?
   printSide     PrintSide?
-  specificPages String? // Comma-separated values for specific pages to print
+  specificPages String?
   totalPages    Int            @default(0)
   totalCost     Decimal        @default(0)
   status        PrintJobStatus @default(PENDING)
 
   // Relations
-  files     PrintJobFile[] // One-to-Many with PrintJobFile
+  files     PrintJobFile[]
+  customer  User?          @relation(fields: [userId], references: [id])
   shopOwner ShopOwner      @relation(fields: [shopOwnerId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-// PrintJobFile Model
+// Uploaded files for each PrintJob
 model PrintJobFile {
-  id            String  @id @default(uuid()) // Primary Key
-  printJobId    String // Foreign Key
+  id            String  @id @default(uuid())
+  printJobId    String
   fileName      String
-  fileUrl       String // Cloud URL for the file
-  fileType      String // PDF, JPG, etc.
-  encryptedHash String? // Encrypted file hash for security
+  fileUrl       String
+  fileType      String
+  encryptedHash String?
   pages         Int     @default(1)
 
   printJob PrintJob @relation(fields: [printJobId], references: [id])
@@ -111,18 +120,18 @@ model PrintJobFile {
   createdAt DateTime @default(now())
 }
 
-// PricingConfig Model
+// Pricing for different papers/types for each Shop
 model PricingConfig {
-  id          String    @id @default(uuid()) // Primary Key
-  shopOwnerId String // Foreign Key to ShopOwner
-  paperType   PaperType // Enum for paper type
-  printType   PrintType // Enum for print type
-  singleSided Decimal   @default(0) // Price for single-sided print
-  doubleSided Decimal   @default(0) // Price for double-sided print
+  id          String    @id @default(uuid())
+  shopOwnerId String
+  paperType   PaperType
+  printType   PrintType
+  singleSided Decimal   @default(0)
+  doubleSided Decimal   @default(0)
 
   shopOwner ShopOwner @relation(fields: [shopOwnerId], references: [id])
 
   createdAt DateTime @default(now())
 
-  @@unique([shopOwnerId, paperType, printType]) // Ensure unique combination of shopOwnerId, paperType, and printType
+  @@unique([shopOwnerId, paperType, printType])
 }

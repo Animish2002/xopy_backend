@@ -17,12 +17,13 @@ const photocopycenterController = {
 
       if (!name || !email || !phoneNumber || !shopName || !passwordHash) {
         return res.status(400).json({
-          message: "All fields (name, email, phone, address) are required",
+          message:
+            "All fields (name, email, phone, shopName, password) are required",
         });
       }
 
       // Check if user already exists
-      const existingUser = await prisma.shopOwner.findUnique({
+      const existingUser = await prisma.user.findUnique({
         where: { email },
       });
 
@@ -32,28 +33,52 @@ const photocopycenterController = {
         });
       }
 
+      // Check if phone number is already in use
+      const existingPhoneNumber = await prisma.user.findUnique({
+        where: { phoneNumber },
+      });
+
+      if (existingPhoneNumber) {
+        return res.status(400).json({
+          message: "User with this phone number already exists",
+        });
+      }
+
       // Hash password
       const hashedPassword = await bcrypt.hash(passwordHash, 10);
 
-      // Generate 8-character unique ID
+      // Generate 8-character unique ID for user
       const shortId = uuid.v4().substring(0, 8);
 
-      // Create a new user with role explicitly set and short ID
-      const user = await prisma.shopOwner.create({
-        data: {
-          id: shortId,
-          name,
-          email,
-          shopName,
-          phoneNumber,
-          address,
-          passwordHash: hashedPassword,
-          role: "ShopOwner",
-        },
+      // Use a transaction to create both User and ShopOwner
+      const result = await prisma.$transaction(async (prisma) => {
+        // First create the User
+        const user = await prisma.user.create({
+          data: {
+            id: shortId,
+            name,
+            email,
+            phoneNumber,
+            address,
+            passwordHash: hashedPassword,
+            role: "SHOP_OWNER", // Use enum value from schema
+          },
+        });
+
+        // Then create the ShopOwner with reference to the User
+        const shopOwner = await prisma.shopOwner.create({
+          data: {
+            userId: user.id,
+            shopName,
+            // qrCodeUrl will be added after generation
+          },
+        });
+
+        return { user, shopOwner };
       });
 
       // Create a dedicated folder for the shop
-      const shopFolder = `shops/${user.id}/`;
+      const shopFolder = `shops/${result.shopOwner.id}/`;
       const { error: storageError } = await supabase.storage
         .from("shop-uploads")
         .upload(`${shopFolder}.folder`, Buffer.from("")); // Create empty folder marker
@@ -65,32 +90,36 @@ const photocopycenterController = {
         });
       }
 
-      // Generate portal URL with shop folder path
-      const portalUrl = `${process.env.FRONTEND_URL}/preferences/${user.id}`;
+      // Generate portal URL with shop owner ID
+      const portalUrl = `${process.env.FRONTEND_URL}/preferences/${result.shopOwner.id}`;
 
       // Generate QR code with portal URL
       const qrCodeUrl = await qr.toDataURL(portalUrl);
 
-      // Update user with QR code URL
-      const updatedUser = await prisma.shopOwner.update({
-        where: { id: user.id },
+      // Update shopOwner with QR code URL
+      const updatedShopOwner = await prisma.shopOwner.update({
+        where: { id: result.shopOwner.id },
         data: {
           qrCodeUrl,
+        },
+        include: {
+          user: true, // Include user data in the response
         },
       });
 
       res.status(201).json({
         message: "Shop owner registered successfully",
-        user: updatedUser,
+        shopOwner: updatedShopOwner,
       });
     } catch (error) {
+      console.error("Registration error:", error);
       res.status(500).json({
-        message: "Error creating user",
+        message: "Error creating shop owner",
         error: error.message,
       });
     }
   },
-  
+
   async createPrintJob(req, res) {
     try {
       // Add these console logs at the start of the function
@@ -451,17 +480,6 @@ const photocopycenterController = {
         message: "Error generating QR code",
         error: error.message,
       });
-    }
-  },
-
-  async getAllUser(req, res) {
-    try {
-      const users = await prisma.shopOwner.findMany();
-      res.status(200).json({ users });
-    } catch (error) {
-      res
-        .status(500)
-        .json({ message: "Error fetching users", error: error.message });
     }
   },
 };

@@ -1,19 +1,19 @@
 const express = require("express");
 const photocopycenterController = require("../controller/photocopycenterAuth");
+const userController = require("../controller/UserAuth");
 
 const router = express.Router();
 
-router.post("/register", photocopycenterController.register);
-
-router.get("/users", photocopycenterController.getAllUser);
 const multer = require("multer");
-const userController = require("../controller/UserAuth");
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB limit
   },
 });
+
+router.post("/register", photocopycenterController.register);
 
 // Update your route to use multer
 router.post(
@@ -41,5 +41,7 @@ router.get("/generate-qr/:shopOwnerId", photocopycenterController.generateQR);
 router.post("/login", userController.login);
 
 router.post("/logout", userController.logout);
+
+router.post("/register-user", userController.register);
 
 module.exports = router;
