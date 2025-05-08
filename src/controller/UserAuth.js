@@ -8,6 +8,7 @@ const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET;
 
 const userController = {
+  
   async register(req, res) {
     try {
       const { email, name, address, phone, password, shopName } = req.body;

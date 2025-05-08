@@ -90,7 +90,7 @@ const photocopycenterController = {
       });
     }
   },
-
+  
   async createPrintJob(req, res) {
     try {
       // Add these console logs at the start of the function

@@ -47,7 +47,9 @@ enum PrintSide {
 enum Role {
   CUSTOMER
   ShopOwner
+  Admin
 }
+
 
 // ShopOwners Model
 model ShopOwner {
