@@ -8,7 +8,78 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// Enums for Print Preferences
+model User {
+  id            String     @id @default(uuid())
+  name          String
+  email         String     @unique
+  passwordHash  String
+  phoneNumber   String     @unique
+  address       String?
+  role          Role       @default(SHOP_OWNER)
+  isVerified    Boolean    @default(false)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  printJobs     PrintJob[]
+  shopOwnerInfo ShopOwner?
+}
+
+model ShopOwner {
+  id            String          @id @default(uuid())
+  userId        String          @unique
+  shopName      String
+  qrCodeUrl     String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  pricingConfig PricingConfig[]
+  printJobs     PrintJob[]
+  user          User            @relation(fields: [userId], references: [id])
+}
+
+model PrintJob {
+  id            String         @id @default(uuid())
+  userId        String?
+  shopOwnerId   String
+  tokenNumber   String         @unique
+  noofCopies    Int
+  printType     PrintType?
+  paperType     PaperType?
+  printSide     PrintSide?
+  specificPages String?
+  totalPages    Int            @default(0)
+  totalCost     Decimal        @default(0)
+  status        PrintJobStatus @default(PENDING)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  shopOwner     ShopOwner      @relation(fields: [shopOwnerId], references: [id])
+  customer      User?          @relation(fields: [userId], references: [id])
+  files         PrintJobFile[]
+}
+
+model PrintJobFile {
+  id            String   @id @default(uuid())
+  printJobId    String
+  fileName      String
+  fileUrl       String
+  fileType      String
+  encryptedHash String?
+  pages         Int      @default(1)
+  createdAt     DateTime @default(now())
+  printJob      PrintJob @relation(fields: [printJobId], references: [id])
+}
+
+model PricingConfig {
+  id          String    @id @default(uuid())
+  shopOwnerId String
+  paperType   PaperType
+  printType   PrintType
+  singleSided Decimal   @default(0)
+  doubleSided Decimal   @default(0)
+  createdAt   DateTime  @default(now())
+  shopOwner   ShopOwner @relation(fields: [shopOwnerId], references: [id])
+
+  @@unique([shopOwnerId, paperType, printType])
+}
+
 enum PrintJobStatus {
   PENDING
   PROCESSING
@@ -42,96 +113,4 @@ enum Role {
   CUSTOMER
   SHOP_OWNER
   ADMIN
-}
-
-// ==========================
-// Models
-// ==========================
-
-// User Model (Common for all users: customers, shop owners, admins)
-model User {
-  id           String   @id @default(uuid())
-  name         String
-  email        String   @unique
-  passwordHash String
-  phoneNumber  String   @unique
-  address      String?
-  role         Role     @default(SHOP_OWNER)
-  isVerified   Boolean  @default(false) // Future use: If needed
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  // Relations
-  shopOwnerInfo ShopOwner? // Only if the user is a shop owner
-  printJobs     PrintJob[] // Print jobs uploaded by customers
-}
-
-// ShopOwner Extra Info
-model ShopOwner {
-  id        String  @id @default(uuid())
-  userId    String  @unique // Link to User
-  shopName  String
-  qrCodeUrl String? // URL for generated QR Code
-
-  user          User            @relation(fields: [userId], references: [id])
-  pricingConfig PricingConfig[]
-  printJobs     PrintJob[] // Print jobs assigned to their shop
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-// Print Job
-model PrintJob {
-  id            String         @id @default(uuid())
-  userId        String? // Customer who uploaded (optional)
-  shopOwnerId   String // Shop where job is being printed
-  tokenNumber   String         @unique
-  noofCopies    Int
-  printType     PrintType?
-  paperType     PaperType?
-  printSide     PrintSide?
-  specificPages String?
-  totalPages    Int            @default(0)
-  totalCost     Decimal        @default(0)
-  status        PrintJobStatus @default(PENDING)
-
-  // Relations
-  files     PrintJobFile[]
-  customer  User?          @relation(fields: [userId], references: [id])
-  shopOwner ShopOwner      @relation(fields: [shopOwnerId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-// Uploaded files for each PrintJob
-model PrintJobFile {
-  id            String  @id @default(uuid())
-  printJobId    String
-  fileName      String
-  fileUrl       String
-  fileType      String
-  encryptedHash String?
-  pages         Int     @default(1)
-
-  printJob PrintJob @relation(fields: [printJobId], references: [id])
-
-  createdAt DateTime @default(now())
-}
-
-// Pricing for different papers/types for each Shop
-model PricingConfig {
-  id          String    @id @default(uuid())
-  shopOwnerId String
-  paperType   PaperType
-  printType   PrintType
-  singleSided Decimal   @default(0)
-  doubleSided Decimal   @default(0)
-
-  shopOwner ShopOwner @relation(fields: [shopOwnerId], references: [id])
-
-  createdAt DateTime @default(now())
-
-  @@unique([shopOwnerId, paperType, printType])
 }
