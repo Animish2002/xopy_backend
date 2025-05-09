@@ -5,8 +5,7 @@
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon app.js",
-    "test": "echo \"No tests yet\"",
-    "postinstall": "npx prisma db pull && npx prisma generate"
+    "test": "echo \"No tests yet\""
   },
   "keywords": [],
   "author": "Animish Chopade",
