@@ -56,4 +56,8 @@ router.post("/logout", userController.logout);
 
 router.post("/register-user", userController.register);
 
+router.get("/user/:id", userController.getUserById);
+
+router.put("/update-user/:id", userController.editProfile);
+
 module.exports = router;
