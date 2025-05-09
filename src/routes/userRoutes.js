@@ -30,6 +30,18 @@ router.patch(
 router.get("/shop-files/:shopId", photocopycenterController.getFilesByShopId);
 
 router.post("/pricing-config", photocopycenterController.pricingConfig);
+router.get(
+  "/pricing-configById/:id",
+  photocopycenterController.getPricingConfigbyId
+);
+router.put(
+  "/edit-pricing-config/:id",
+  photocopycenterController.editPricingConfig
+);
+router.delete(
+  "/delete-pricing-config/:id",
+  photocopycenterController.deletPricingConfig
+);
 
 router.get(
   "/pricing-config/:shopOwnerId",
