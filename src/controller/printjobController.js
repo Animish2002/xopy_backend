@@ -8,7 +8,7 @@ const { getIO } = require("../utils/socket");
 // Initialize Supabase
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
+  process.env.SUPABASE_KEY
 );
 
 // Helper function to calculate pricing

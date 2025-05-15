@@ -14,7 +14,7 @@ app.use(express.json());
 const userRoutes = require("./src/routes/userRoutes");
 const pricingRoutes = require("./src/routes/pricingRoutes");
 const adminRoutes = require("./src/routes/adminRoutes");
-const printingRoutes = require("./src/routes/printingRoutes");
+const printRoutes = require("./src/routes/printRoutes");
 const { initializeSocket } = require("./src/utils/socket");
 
 const server = http.createServer(app);
@@ -23,7 +23,7 @@ initializeSocket(server);
 
 app.use("/api/auth", userRoutes);
 app.use("/api/photocopycenter", pricingRoutes);
-app.use("/api/printshop", printingRoutes); // Fixed: was using printRoutes but importing printingRoutes
+app.use("/api/printshop", printRoutes);
 app.use("/api/admin", adminRoutes);
 
 server.listen(PORT, () => {
