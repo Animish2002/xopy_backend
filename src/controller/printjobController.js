@@ -66,7 +66,7 @@ async function countPDFPages(fileBuffer) {
 }
 
 const printJobController = {
-  async createPrintJob(req, res) {
+ async createPrintJob(req, res) {
     try {
       console.log("Request body:", req.body);
       console.log("Request files:", req.files);
@@ -139,19 +139,33 @@ const printJobController = {
         totalPages += filePages;
       }
 
-      // Create print job with proper type conversion
+      // Verify shop owner exists first
+      const shopOwner = await prisma.user.findUnique({
+        where: { id: String(shopOwnerId) }
+      });
+
+      // if (!shopOwner) {
+      //   return res.status(404).json({
+      //     message: "Shop owner not found. Please provide a valid shopOwnerId.",
+      //   });
+      // }
+
+      // Create print job with schema-compatible fields
       const printJob = await prisma.printJob.create({
         data: {
           shopOwnerId: String(shopOwnerId),
           tokenNumber,
-          customerName: String(customerName || ""),
-          customerPhone: String(customerPhone || ""),
-          customerEmail: String(customerEmail || ""),
+          // Store customer information in metadata as JSON if not in schema
+          metadata: JSON.stringify({
+            customerName: customerName || "",
+            customerPhone: customerPhone || "",
+            customerEmail: customerEmail || "",
+            specificPages: specificPages || "",
+          }),
           noofCopies: parseInt(noofCopies),
           printType: printType || "BLACK_WHITE",
           paperType: paperType || "A4",
           printSide: printSide || "SINGLE_SIDED",
-          specificPages: String(specificPages || ""),
           totalPages,
           status: "PENDING",
         },
@@ -211,13 +225,16 @@ const printJobController = {
         printJobFiles.push(printJobFile);
       }
 
+      // Extract customer info from metadata for the response
+      const metadata = printJob.metadata ? JSON.parse(printJob.metadata) : {};
+
       // Notify shop owner of new print job via WebSocket
       getIO()
         .to(`shop_${shopOwnerId}`)
         .emit("newPrintJob", {
           id: printJob.id,
           tokenNumber,
-          customerName: customerName || "Anonymous",
+          customerName: metadata.customerName || "Anonymous",
           totalPages,
           totalCost,
           createdAt: printJob.createdAt,
@@ -227,6 +244,7 @@ const printJobController = {
         message: "Print job created successfully",
         printJob: {
           ...printJob,
+          ...metadata, // Add the customer info from metadata back to the response
           totalCost,
           files: printJobFiles,
         },
@@ -239,7 +257,7 @@ const printJobController = {
       });
     }
   },
-
+  
   async updatePrintJobStatus(req, res) {
     try {
       const { jobId } = req.params;
@@ -340,9 +358,14 @@ const printJobController = {
         select: {
           id: true,
           tokenNumber: true,
-          customerName: true,
-          customerPhone: true,
-          customerEmail: true,
+          // Get customer information from the related User model
+          customer: {
+            select: {
+              name: true,
+              email: true,
+              phoneNumber: true,
+            },
+          },
           noofCopies: true,
           printType: true,
           paperType: true,
@@ -365,7 +388,7 @@ const printJobController = {
         },
       });
 
-      // Generate signed URLs for each file
+      // Generate signed URLs for each file and format the response
       const filesWithUrls = await Promise.all(
         printJobsWithFiles.map(async (job) => {
           const filesWithSignedUrls = await Promise.all(
@@ -403,8 +426,15 @@ const printJobController = {
             })
           );
 
+          // Format the response to match the expected structure
           return {
             ...job,
+            // Flatten customer information to the expected fields
+            customerName: job.customer?.name || null,
+            customerEmail: job.customer?.email || null,
+            customerPhone: job.customer?.phoneNumber || null,
+            // Remove the nested customer object if you don't need it in the response
+            customer: undefined,
             files: filesWithSignedUrls,
           };
         })
