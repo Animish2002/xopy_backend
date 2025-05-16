@@ -281,31 +281,21 @@ const printJobController = {
         });
       }
 
-      // If status is COMPLETED, update the file URLs expiration
+      // If status is COMPLETED, delete the files from storage
       if (status === "COMPLETED") {
-        // Set expiration for files or delete them based on your policy
+        // Delete files from storage
         await Promise.all(
           printJob.files.map(async (file) => {
             const filePath = `shops/${printJob.shopOwnerId}/${printJob.id}_${file.fileName}`;
 
-            // Option 1: Delete files
-            // const { error: deleteError } = await supabase.storage
-            //   .from("shop-uploads")
-            //   .remove([filePath]);
-            // if (deleteError) throw deleteError;
-
-            // Option 2: Update URL to expire in 24 hours
-            const { data: urlData, error: urlError } = await supabase.storage
+            const { error: deleteError } = await supabase.storage
               .from("shop-uploads")
-              .createSignedUrl(filePath, 60 * 5); // 5 minute expiry
+              .remove([filePath]);
 
-            if (urlError) throw urlError;
+            if (deleteError) throw deleteError;
 
-            // Update file URL in database
-            await prisma.printJobFile.update({
-              where: { id: file.id },
-              data: { fileUrl: urlData.signedUrl },
-            });
+            // Delete file from database
+            await prisma.printJobFile.delete({ where: { id: file.id } });
           })
         );
       }
