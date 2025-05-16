@@ -66,7 +66,7 @@ async function countPDFPages(fileBuffer) {
 }
 
 const printJobController = {
- async createPrintJob(req, res) {
+  async createPrintJob(req, res) {
     try {
       console.log("Request body:", req.body);
       console.log("Request files:", req.files);
@@ -141,7 +141,7 @@ const printJobController = {
 
       // Verify shop owner exists first
       const shopOwner = await prisma.user.findUnique({
-        where: { id: String(shopOwnerId) }
+        where: { id: String(shopOwnerId) },
       });
 
       // if (!shopOwner) {
@@ -233,11 +233,18 @@ const printJobController = {
         .to(`shop_${shopOwnerId}`)
         .emit("newPrintJob", {
           id: printJob.id,
-          tokenNumber,
+          tokenNumber: printJob.tokenNumber,
           customerName: metadata.customerName || "Anonymous",
-          totalPages,
-          totalCost,
+          totalPages: printJob.totalPages,
+          totalCost: printJob.totalCost,
+          status: printJob.status,
+          files: printJobFiles.map((file) => ({
+            id: file.id,
+            fileName: file.fileName,
+            fileUrl: file.fileUrl,
+          })),
           createdAt: printJob.createdAt,
+          // Add all other necessary fields that match your frontend expectations
         });
 
       res.status(201).json({
@@ -257,7 +264,7 @@ const printJobController = {
       });
     }
   },
-  
+
   async updatePrintJobStatus(req, res) {
     try {
       const { jobId } = req.params;
