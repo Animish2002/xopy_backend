@@ -364,15 +364,7 @@ const printJobController = {
         ...query,
         select: {
           id: true,
-          tokenNumber: true,
-          // Get customer information from the related User model
-          customer: {
-            select: {
-              name: true,
-              email: true,
-              phoneNumber: true,
-            },
-          },
+          tokenNumber: true,          
           noofCopies: true,
           printType: true,
           paperType: true,
@@ -392,6 +384,7 @@ const printJobController = {
               createdAt: true,
             },
           },
+          metadata: true,
         },
       });
 
@@ -437,9 +430,6 @@ const printJobController = {
           return {
             ...job,
             // Flatten customer information to the expected fields
-            customerName: job.customer?.name || null,
-            customerEmail: job.customer?.email || null,
-            customerPhone: job.customer?.phoneNumber || null,
             // Remove the nested customer object if you don't need it in the response
             customer: undefined,
             files: filesWithSignedUrls,
