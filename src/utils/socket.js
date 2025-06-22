@@ -11,7 +11,12 @@ const initializeSocket = (server) => {
   });
 
   io.on("connection", (socket) => {
-    console.log(`Client connected: ${socket.id}`);
+    console.log(`✅ WebSocket connected: ${socket.id}`);
+
+    // Debug: Log any received event
+    socket.onAny((event, ...args) => {
+      console.log(`🔹 Received event: ${event}`, args);
+    });
 
     // Join a room specific to the shop owner
     socket.on("joinShopRoom", (shopOwnerId) => {
@@ -26,14 +31,14 @@ const initializeSocket = (server) => {
     });
 
     socket.on("disconnect", () => {
-      console.log(`Client disconnected: ${socket.id}`);
+      console.log(`❌ Client disconnected: ${socket.id}`);
     });
   });
 
   return io;
 };
 
-// Getter function to access the io instance
+// Getter function to access the io instance elsewhere
 const getIO = () => {
   if (!io) {
     throw new Error("Socket.io not initialized");
@@ -43,5 +48,5 @@ const getIO = () => {
 
 module.exports = {
   initializeSocket,
-  getIO
+  getIO,
 };

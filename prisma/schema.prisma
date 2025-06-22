@@ -50,10 +50,10 @@ model PrintJob {
   status        PrintJobStatus @default(PENDING)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
+  metadata      String?
   shopOwner     ShopOwner      @relation(fields: [shopOwnerId], references: [id])
   customer      User?          @relation(fields: [userId], references: [id])
   files         PrintJobFile[]
-  metadata      String?
 }
 
 model PrintJobFile {
